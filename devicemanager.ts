@@ -1,6 +1,5 @@
 import {Peripheral, Service, Characteristic} from 'noble';
-import {Express} from 'express';
-import * as express from 'express';
+import {DeviceWebInterface} from './devicewebinterface';
 
 export class DeviceManager {
 
@@ -8,14 +7,13 @@ export class DeviceManager {
     private connected : boolean = false;
     private serviceList : Service[];
     private webInterface : DeviceWebInterface;
-    private characteristicsPromise : Promise<Characteristic[]>;
+    private servicesCharacteristicsPromise : Promise<{}>;
 
     public get name() { return this.peripheral.advertisement.localName; }
     public get address() { return this.peripheral.address; }
     public get addressType() { return this.peripheral.addressType; }
     public get state() { return this.peripheral.state; }
     public get connectable() { return this.peripheral.connectable; }
-    public get services() { return this.peripheral.services; }
 
     constructor(peripheral: Peripheral) {
         this.peripheral = peripheral;
@@ -27,24 +25,38 @@ export class DeviceManager {
     }
 
     public start() : void {
-        this.webInterface = new DeviceWebInterface(this);
-        this.webInterface.start();
-
-/*
-        this.peripheral.connect((error) => {
+         this.peripheral.connect((error) => {
             if(error != null) {
                 console.warn(this.deviceDescription + ' : Could not connect.')
                 console.warn(error);
+                return;
             }
 
-           
+            this.connected = true;
+            this.webInterface = new DeviceWebInterface(this);
+            this.webInterface.start();
         });
-        */
+    }
+
+    public get services() : Promise<Service[]> {
+        return this.characteristicsAndServices.then(x => {
+            return (<any>x).services;
+        }).catch((reason) => {
+            console.log('Failed retriving characteristics: ' + reason);
+        });
     }
 
     public get characteristics() : Promise<Characteristic[]> {
-        if(!this.characteristicsPromise) {
-            this.characteristicsPromise = new Promise((resolve, reject) => {
+        return this.characteristicsAndServices.then(x => {
+            return (<any>x).characteristics;
+        }).catch((reason) => {
+            console.log('Failed retriving characteristics: ' + reason);
+        });
+    }
+
+    private get characteristicsAndServices() : Promise<{}> {
+        if(!this.servicesCharacteristicsPromise) {
+            this.servicesCharacteristicsPromise = new Promise((resolve, reject) => {
 
                 if(!this.connected) {
                     reject('Not connected');
@@ -57,12 +69,12 @@ export class DeviceManager {
                             reject(error);
                         }
 
-                        resolve(characteristics);
+                        resolve({services, characteristics});
                     }
                 );
             });
         }
-        return this.characteristicsPromise;
+        return this.servicesCharacteristicsPromise;
     }
 
     private onConnect() : void {
@@ -72,6 +84,7 @@ export class DeviceManager {
 
     private onDisconnect() : void {
         this.connected = false;
+        this.peripheral.connect();
         console.log(this.deviceDescription + " : Disconnected");
     }
 
@@ -82,102 +95,9 @@ export class DeviceManager {
 
     private onServicesDiscover(services: Service[]) : void {
         this.serviceList = services;
-        /*
-        console.log(this.deviceDescription + " : services");
-        services.forEach(service  => {
-            console.log('Service');
-            console.log(service.uuid + ' ' + service.name);
-            if(service.characteristics) {
-                console.log('Characteristics');
-                service.characteristics.forEach(char => {
-                    console.log(char.name + ' ' + char.uuid);
-                });
-            }
-        });
-        */
     }
 
     private get deviceDescription() {
         return 'device: ' + this.peripheral.advertisement.localName + ' -- ' + this.peripheral.address;
     }
-}
-
-class DeviceWebInterface {
-
-    device: DeviceManager;
-    app: Express;
-    
-    constructor(device: DeviceManager) {
-        this.device = device;
-    }
-
-    public start() : void {
-
-        this.app = express();
-        this.app.get('/', (req, res) => {
-
-            var output = {
-                name: this.device.name,
-                address: this.device.address,
-                addressType: this.device.addressType,
-                connectable: this.device.connectable,
-                state: this.device.state,
-                services: null,
-                characteristics: null
-            };
-
-            if(this.device.services) 
-            {
-                output.services = this.device.services.map(service => {
-                    return {
-                        uuid: service.uuid,
-                        type: service.type,
-                        name: service.name
-                    }
-                })
-            }
-            else {
-                output.services = 'Not yet retrived';
-            }
-
-            var promises = [];
-
-            promises.push(
-                this.device.characteristics.then((chars) => {
-                    output.characteristics = chars.map(char => {
-                            return {
-                                uuid: char.uuid,
-                                name: char.name,
-                                type: char.type,
-                            };
-                    });
-                })
-                .catch((reason) => {
-                    output.characteristics = 'Cannot get characteristics as we are not connected.';
-                })
-            );
-
-            Promise.all(promises).then(() => {
-                res.send(output)
-            });
-        });
-
-        var port = this.calculatePort();
-        console.log(port);
-        this.app.listen(port, () => {
-            console.log('DeviceWebInterface started for ' + this.device.name + ' ' + this.device.address);
-            console.log('Port ' + port);
-        });
-    }
-
-    private calculatePort() : number {
-
-        // Take the last 3 hex characters from the address, and add 5000 to make the port for this service.
-        var basePort = 5000;
-        var devicePort = parseInt(this.device.address.substr(this.device.address.length - 2, 2), 16);
-        var appPort = basePort + devicePort;
-
-        return appPort;
-    }
-
 }

@@ -2,13 +2,20 @@ import * as noble from 'noble';
 import {Peripheral} from 'noble';
 
 import {DeviceManager} from './devicemanager';
+import {CentralWebInterface} from './centralwebinterface';
 
 export class Application {
     private poweredOnPromise: Promise<boolean>;
 
+    private centralWebInterface: CentralWebInterface;
     private devices: DeviceManager[] = [];
 
+    public get knownDevices() {
+        return this.devices;
+    }
+
     public constructor() {
+        this.centralWebInterface = new CentralWebInterface(this);
         this.initNoble();
     }
 
