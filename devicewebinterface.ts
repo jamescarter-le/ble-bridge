@@ -37,7 +37,7 @@ export class DeviceWebInterface {
     <manufacturer>` + this.device.name + `</manufacturer>
     <modelDescription>` + this.device.name + `</modelDescription>
     <modelName>` + this.device.name + `</modelName>
-    <UDN>uuid:` + 'HELLO123456' + `</UDN> 
+    <UDN>uuid:` + this.device.address + `</UDN> 
 
 </device>
 </root>
@@ -52,21 +52,11 @@ export class DeviceWebInterface {
             console.log('/char-write-req requested');
 
             var val = Number.parseInt(req.query['value']);
-            console.log(val);
+            var arr = new Uint8Array([val]);
+            var buffer = new Buffer(arr);
 
-            this.device.characteristics.then(char => {
-                console.log('writing');
-                var arr = new Uint8Array([val]);
-                var buffer = new Buffer(arr);
-                console.log(buffer);
-                char[4].write(buffer, true, (error) => {
-                    console.log(error);
-                    console.log('written');
-                    res.send('done');
-                })
-            }).catch((reason) => {
-                res.send('failed: ' + reason);
-            });
+            this.device.writeCharacteristicRequest(buffer);
+
         })
 
         this.app.get('/', (req, res) => {
@@ -127,20 +117,13 @@ export class DeviceWebInterface {
 
         
         this.ssdp = new Server({
-            udn: 'uuid:HELLO123456',// + this.device.address,
+            udn: 'uuid:' + this.device.address,
             location: 'http://192.168.0.25:' + port + '/desc.html'
         });
 
-        this.device.services.then((services) => {
-            var uuid = services[services.length - 1].uuid;
-            this.ssdp.addUSN('urn:schemas-upnp-org:device:BlePeripheral:1');
-
-            this.ssdp.start('0.0.0.0');
-
-            console.log('ssdp started');
-        }).catch((reason) => {
-            console.log('Could not start SSDP: '+ reason);
-        })
+       this.ssdp.addUSN('urn:schemas-upnp-org:device:BlePeripheral:1');
+       this.ssdp.start('0.0.0.0');
+       console.log('ssdp started');
     }
 
     private calculatePort() : number {

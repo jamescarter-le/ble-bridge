@@ -7,7 +7,7 @@ export class DeviceManager {
     private connected : boolean = false;
     private serviceList : Service[];
     private webInterface : DeviceWebInterface;
-    private servicesCharacteristicsPromise : Promise<{}>;
+    private servicesCharacteristicsPromise : Promise<ServicesAndCharacteristics>;
 
     public get name() { return this.peripheral.advertisement.localName; }
     public get address() { return this.peripheral.address; }
@@ -25,22 +25,13 @@ export class DeviceManager {
     }
 
     public start() : void {
-         this.peripheral.connect((error) => {
-            if(error != null) {
-                console.warn(this.deviceDescription + ' : Could not connect.')
-                console.warn(error);
-                return;
-            }
-
-            this.connected = true;
-            this.webInterface = new DeviceWebInterface(this);
-            this.webInterface.start();
-        });
+        this.webInterface = new DeviceWebInterface(this);
+        this.webInterface.start();
     }
 
     public get services() : Promise<Service[]> {
         return this.characteristicsAndServices.then(x => {
-            return (<any>x).services;
+            return x.Services;
         }).catch((reason) => {
             console.log('Failed retriving characteristics: ' + reason);
         });
@@ -48,33 +39,72 @@ export class DeviceManager {
 
     public get characteristics() : Promise<Characteristic[]> {
         return this.characteristicsAndServices.then(x => {
-            return (<any>x).characteristics;
+            return x.Characteristics;
         }).catch((reason) => {
             console.log('Failed retriving characteristics: ' + reason);
         });
     }
 
-    private get characteristicsAndServices() : Promise<{}> {
-        if(!this.servicesCharacteristicsPromise) {
-            this.servicesCharacteristicsPromise = new Promise((resolve, reject) => {
+    public writeCharacteristicRequest(value: Buffer) : Promise<boolean> {
+        return this.characteristics.then<boolean>(char =>
 
-                if(!this.connected) {
-                    reject('Not connected');
-                    return;
-                }
+            new Promise((resolve, reject) => {
 
-                this.peripheral.discoverAllServicesAndCharacteristics(
-                    (error, services, characteristics) => {
-                        if(error) {
-                            reject(error);
-                        }
-
-                        resolve({services, characteristics});
+                char[4].write(value, true, (error) => {
+                    if(error) {
+                        reject(error);
+                    } 
+                    else {
+                        console.log('written to characteristic');
+                        resolve(true);
                     }
-                );
+                })
+
+            })
+
+        );
+    }
+
+    private get characteristicsAndServices() : Promise<ServicesAndCharacteristics> {
+        if(!this.servicesCharacteristicsPromise) {
+            
+            this.servicesCharacteristicsPromise =  this.connect().then((connected) => {
+
+                return new Promise<ServicesAndCharacteristics>((resolve, reject) => {
+
+                    this.peripheral.discoverAllServicesAndCharacteristics(
+                        (error, services, characteristics) => {
+                            if(error) {
+                                reject(error);
+                            }
+
+
+                            resolve(new ServicesAndCharacteristics(services, characteristics));
+                        }
+                    );
+
+                });
+
             });
         }
         return this.servicesCharacteristicsPromise;
+    }
+
+    private connect() : Promise<boolean> {
+        if(this.connected) {
+            return Promise.resolve(true);
+        }
+
+        return new Promise((resolve, reject) => {
+            this.peripheral.connect((error) => {
+                if(error) {
+                    reject(error);
+                }
+                else{
+                    resolve(true);
+                }
+            })
+        });
     }
 
     private onConnect() : void {
@@ -100,4 +130,15 @@ export class DeviceManager {
     private get deviceDescription() {
         return 'device: ' + this.peripheral.advertisement.localName + ' -- ' + this.peripheral.address;
     }
+}
+
+class ServicesAndCharacteristics {
+    public Services : Service[];
+    public Characteristics : Characteristic[]
+
+    constructor(services, characteristics) {
+        this.Services = services;
+        this.Characteristics = characteristics;
+    }
+
 }
