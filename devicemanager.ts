@@ -45,6 +45,23 @@ export class DeviceManager {
         });
     }
 
+    public readCharacteristicRequest(handle) : Promise<Buffer> {
+        return this.characteristics.then<Buffer>((char: Characteristic[]) => 
+
+            new Promise((resolve, reject) => {
+                char[4].read((error, data) => {
+                    if(error) {
+                        reject(error);
+                    }
+                    else {
+                        resolve(data);
+                    }
+                })
+            })
+
+        );
+    }
+
     public writeCharacteristicRequest(value: Buffer) : Promise<boolean> {
         return this.characteristics.then<boolean>(char =>
 

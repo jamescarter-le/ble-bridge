@@ -26,6 +26,7 @@ export class DeviceWebInterface {
         this.setupRootHandler();
         this.setupUniversalPlugAndPlayHandler();
         this.setupWriteCharacteristicRequestHandler();
+        this.setupReadCharacteristicRequestHandler();
 
         var port = this.calculatePort();
         this.app.listen(port, () => {
@@ -56,6 +57,23 @@ export class DeviceWebInterface {
         var appPort = basePort + devicePort;
 
         return appPort;
+    }
+
+    private setupReadCharacteristicRequestHandler() {
+        this.app.get('/read-char', (req, res) => {
+
+            var handle = 0x00;
+
+            this.device.readCharacteristicRequest(handle).then((buffer) => {
+                res.send({
+                    value: buffer
+                })
+            }).catch((error) => {
+                res.send({
+                });
+            });
+
+        });
     }
 
     private setupWriteCharacteristicRequestHandler() {
